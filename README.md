@@ -1,61 +1,23 @@
-# Assignments for EECS 498.008 / 598.008: Deep Learning for Computer Vision Winter 2022
-This repository contains uncompleted and completed assignments from the "Deep Learning for Computer Vision" course offered by the University of Michigan in the Winter of 2022.
+# EECS 498/598: Deep Learning for Computer Vision (Winter 2022)
 
-All course materials can be found [here](https://web.eecs.umich.edu/~justincj/teaching/eecs498/WI2022/).
+我的课程作业仓库。
 
-Please note that [this repo](https://github.com/nizne9/EECS498-WI22) exclusively contains my self-learning materials and is not officially affiliated with the course.
+- 作业原始框架来自 [nizne9/EECS498-WI22](https://github.com/nizne9/EECS498-WI22) 的 main 分支（仅含未完成的骨架）。
+- 课程原官网 `web.eecs.umich.edu/~justincj/` 已失效；课程视频见 [B 站搬运](https://www.bilibili.com/video/BV1eD4y1U7uu/)。
+- 每份作业 = 一个 `.ipynb`（题目说明与预期输出）+ 一个 `.py`（待实现的代码）。
+- 本仓库只存放我自己的实现，不含任何现成答案。
 
-If you need the solutions, please check the [solutions branch](https://github.com/nizne9/EECS498-WI22/tree/solutions).
+## 进度
 
-## A1
+| 作业 | 内容 | 状态 |
+| --- | --- | --- |
+| A1 | PyTorch 101、kNN 分类器 | 未开始 |
+| A2 | SVM / Softmax、两层网络（手写梯度 + 数值校验） | 未开始 |
+| A3 | 全连接网络、CNN（手写优化器 / BN / Dropout / 卷积） | 未开始 |
+| A4 | 目标检测：FCOS、Faster R-CNN | 未开始 |
+| A5 | RNN / LSTM、图像描述、Transformer、ViT | 未开始 |
+| A6 | VAE、GAN、网络可视化、风格迁移 | 未开始 |
 
-A1 include 2 questions:
+## 环境
 
-**Q1: PyTorch 101**. Walk you through the basics of working with tensors in PyTorch.
-
-**Q2: k-Nearest Neighbor classifier**. Walk you through implementing a kNN classifier. 
-
-**The goals**:
-
-* Develop proficiency with PyTorch tensors
-* Gain experience using notebooks on Google Colab
-* Understand the basic Image Classification pipeline and the data-driven approach (train/predict stages)
-* Understand the train/val/test splits and the use of validation data for hyperparameter tuning
-* Implement and apply a k-Nearest Neighbor (kNN) classifier
-* Learn how to test your implementation on Autograder
-
-## A2
-
-A2 include 3 questions:
-
-**Q1: Linear Classifiers**. Walk you through implmenting SVM and Softmax classifier.
-
-**Q2: Two-layer Neural Network**. Walk you through implementing a two-layer neural network-based classifier.
-
-**Q3: MNIST Challenge**. Walk you through the challenge problem where you will manually set the weights of a Two-layer Neural Network classifier and evaluate on MNIST hand drawn digits. This interesting notebook encourages you to rely on your intuition to achieve the desired results.
-
-**The goals**:
-
-* Implement and apply a Multiclass Support Vector Machine (SVM) classifier
-* Implement and apply a Softmax classifier
-* Implement and apply a Two-layer Neural Network classifier
-* Understand the differences and tradeoffs between these classifiers
-* Understand how a Two-layer Neural Network can approximate an arbitrary function
-* Practice implementing vectorized gradient code by checking against naive implementations, and using numeric gradient checking
-
-## A3
-
-A3 include 2 questions:
-
-**Q1: Fully-Connected Neural Network**. Walk you through implementing Fully-Connected Neural Networks.
-
-**Q2: Convolutional Neural Network**. Walk you through implementing Convolutional Neural Networks.
-
-**The goals**:
-
-* Understand Neural Networks and how they are arranged in layered architectures
-* Understand and be able to implement modular backpropagation
-* Implement various update rules used to optimize Neural Networks
-* Implement Batch Normalization for training deep networks
-* Implement Dropout to regularize networks
-* Understand the architecture of Convolutional Neural Networks and get practice with training these models on data
+作业按 Google Colab 设计。本地需 PyTorch + torchvision。
