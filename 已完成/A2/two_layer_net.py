@@ -17,7 +17,6 @@ def hello_two_layer_net():
     print("Hello from two_layer_net.py!")
 
 
-# Template class modules that we will use later: Do not edit/modify this class
 class TwoLayerNet(object):
     def __init__(
         self,
@@ -46,7 +45,6 @@ class TwoLayerNet(object):
         - device: Optional, whether the weight params is on GPU or CPU
         - std: Optional, initial weight scaler.
         """
-        # reset seed before start
         random.seed(0)
         torch.manual_seed(0)
 
@@ -81,13 +79,11 @@ class TwoLayerNet(object):
         batch_size: int = 200,
         verbose: bool = False,
     ):
-        # fmt: off
         return nn_train(
             self.params, nn_forward_backward, nn_predict, X, y,
             X_val, y_val, learning_rate, learning_rate_decay,
             reg, num_iters, batch_size, verbose,
         )
-        # fmt: on
 
     def predict(self, X: torch.Tensor):
         return nn_predict(self.params, nn_forward_backward, X)
@@ -105,7 +101,6 @@ class TwoLayerNet(object):
         for param in ["W1", "b1", "W2", "b2"]:
             if param not in self.params:
                 raise Exception("Failed to load your checkpoint")
-        # print("load checkpoint file: {}".format(path))
 
 
 def nn_forward_pass(params: Dict[str, torch.Tensor], X: torch.Tensor):
@@ -133,25 +128,13 @@ def nn_forward_pass(params: Dict[str, torch.Tensor], X: torch.Tensor):
     - hidden: Tensor of shape (N, H) giving the hidden layer representation
       for each input value (after the ReLU).
     """
-    # Unpack variables from the params dictionary
     W1, b1 = params["W1"], params["b1"]
     W2, b2 = params["W2"], params["b2"]
     N, D = X.shape
 
-    # Compute the forward pass
-    hidden = None
-    scores = None
-    ############################################################################
-    # TODO: Perform the forward pass, computing the class scores for the input.#
-    # Store the result in the scores variable, which should be an tensor of    #
-    # shape (N, C).                                                            #
-    ############################################################################
     hidden = X.mm(W1) + b1
     hidden[hidden < 0] = 0  # relu
     scores = hidden.mm(W2) + b2
-    ###########################################################################
-    #                             END OF YOUR CODE                            #
-    ###########################################################################
 
     return scores, hidden
 
@@ -191,44 +174,21 @@ def nn_forward_backward(
     - grads: Dictionary mapping parameter names to gradients of those parameters
       with respect to the loss function; has the same keys as self.params.
     """
-    # Unpack variables from the params dictionary
     W1, b1 = params["W1"], params["b1"]
     W2, b2 = params["W2"], params["b2"]
     N, D = X.shape
 
     scores, h1 = nn_forward_pass(params, X)
-    # If the targets are not given then jump out, we're done
     if y is None:
         return scores
 
-    # Compute the loss
-    loss = None
-    ############################################################################
-    # TODO: Compute the loss, based on the results from nn_forward_pass.       #
-    # This should include both the data loss and L2 regularization for W1 and  #
-    # W2. Store the result in the variable loss, which should be a scalar. Use #
-    # the Softmax classifier loss. When you implment the regularization over W,#
-    # please DO NOT multiply the regularization term by 1/2 (no coefficient).  #
-    # If you are not careful here, it is easy to run into numeric instability  #
-    # (Check Numeric Stability in http://cs231n.github.io/linear-classify/).   #
-    ############################################################################
     # softmax，先减max
     s = scores - scores.max(1, keepdim=True).values
     logp = s - s.exp().sum(1, keepdim=True).log()
     loss = -logp[range(N), y].mean()
     loss = loss + reg * (W1*W1).sum() + reg * (W2*W2).sum()
-    ###########################################################################
-    #                             END OF YOUR CODE                            #
-    ###########################################################################
 
-    # Backward pass: compute gradients
     grads = {}
-    ###########################################################################
-    # TODO: Compute the backward pass, computing the derivatives of the       #
-    # weights and biases. Store the results in the grads dictionary.          #
-    # For example, grads['W1'] should store the gradient on W1, and be a      #
-    # tensor of same size                                                     #
-    ###########################################################################
     ds = logp.exp()
     ds[range(N), y] -= 1
     ds /= N
@@ -238,9 +198,6 @@ def nn_forward_backward(
     dh[h1 <= 0] = 0
     grads['W1'] = X.t().mm(dh) + 2*reg*W1
     grads['b1'] = dh.sum(0)
-    ###########################################################################
-    #                             END OF YOUR CODE                            #
-    ###########################################################################
 
     return loss, grads
 
@@ -299,7 +256,6 @@ def nn_train(
     num_train = X.shape[0]
     iterations_per_epoch = max(num_train // batch_size, 1)
 
-    # Use SGD to optimize the parameters in self.model
     loss_history = []
     train_acc_history = []
     val_acc_history = []
@@ -307,28 +263,16 @@ def nn_train(
     for it in range(num_iters):
         X_batch, y_batch = sample_batch(X, y, num_train, batch_size)
 
-        # Compute loss and gradients using the current minibatch
         loss, grads = loss_func(params, X_batch, y=y_batch, reg=reg)
         loss_history.append(loss.item())
 
-        #########################################################################
-        # TODO: Use the gradients in the grads dictionary to update the         #
-        # parameters of the network (stored in the dictionary self.params)      #
-        # using stochastic gradient descent. You'll need to use the gradients   #
-        # stored in the grads dictionary defined above.                         #
-        #########################################################################
         for name in params:
             params[name] -= learning_rate * grads[name]
-        #########################################################################
-        #                             END OF YOUR CODE                          #
-        #########################################################################
 
         if verbose and it % 100 == 0:
             print("iteration %d / %d: loss %f" % (it, num_iters, loss.item()))
 
-        # Every epoch, check train and val accuracy and decay learning rate.
         if it % iterations_per_epoch == 0:
-            # Check accuracy
             y_train_pred = pred_func(params, loss_func, X_batch)
             train_acc = (y_train_pred == y_batch).float().mean().item()
             y_val_pred = pred_func(params, loss_func, X_val)
@@ -336,7 +280,6 @@ def nn_train(
             train_acc_history.append(train_acc)
             val_acc_history.append(val_acc)
 
-            # Decay learning rate
             learning_rate *= learning_rate_decay
 
     return {
@@ -370,16 +313,9 @@ def nn_predict(
       the elements of X. For all i, y_pred[i] = c means that X[i] is predicted
       to have class c, where 0 <= c < C.
     """
-    y_pred = None
 
-    ###########################################################################
-    # TODO: Implement this function; it should be VERY simple!                #
-    ###########################################################################
     scores = loss_func(params, X)
     y_pred = scores.argmax(1)
-    ###########################################################################
-    #                              END OF YOUR CODE                           #
-    ###########################################################################
 
     return y_pred
 
@@ -403,20 +339,11 @@ def nn_get_search_params():
     hidden_sizes = []
     regularization_strengths = []
     learning_rate_decays = []
-    ###########################################################################
-    # TODO: Add your own hyper parameter lists. This should be similar to the #
-    # hyperparameters that you used for the SVM, but you may need to select   #
-    # different hyperparameters to achieve good performance with the softmax  #
-    # classifier.                                                             #
-    ###########################################################################
     # cpu别搜太多
     learning_rates = [0.1, 0.5, 1.0]
     hidden_sizes = [64, 128]
     regularization_strengths = [1e-5, 1e-3]
     learning_rate_decays = [0.95]
-    ###########################################################################
-    #                           END OF YOUR CODE                              #
-    ###########################################################################
 
     return (
         learning_rates,
@@ -460,19 +387,6 @@ def find_best_net(
     best_stat = None
     best_val_acc = 0.0
 
-    #############################################################################
-    # TODO: Tune hyperparameters using the validation set. Store your best      #
-    # trained model in best_net.                                                #
-    #                                                                           #
-    # To help debug your network, it may help to use visualizations similar to  #
-    # the ones we used above; these visualizations will have significant        #
-    # qualitative differences from the ones we saw above for the poorly tuned   #
-    # network.                                                                  #
-    #                                                                           #
-    # Tweaking hyperparameters by hand can be fun, but you might find it useful #
-    # to write code to sweep through possible combinations of hyperparameters   #
-    # automatically like we did on the previous exercises.                      #
-    #############################################################################
     lrs, hss, regs, decays = get_param_set_fn()
     if len(decays) == 0:
         decays = [0.95]
@@ -496,8 +410,5 @@ def find_best_net(
                         best_val_acc = acc
                         best_net = net
                         best_stat = stats
-    #############################################################################
-    #                               END OF YOUR CODE                            #
-    #############################################################################
 
     return best_net, best_stat, best_val_acc

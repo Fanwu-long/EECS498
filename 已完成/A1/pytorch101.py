@@ -1,6 +1,5 @@
 import torch
 
-# Type hints.
 from typing import List, Tuple
 from torch import Tensor
 
@@ -22,16 +21,9 @@ def create_sample_tensor() -> Tensor:
     Returns:
         Tensor of shape (3, 2) as described above.
     """
-    x = None
-    ##########################################################################
-    #                     TODO: Implement this function                      #
-    ##########################################################################
     x = torch.zeros(3, 2)
     x[0, 1] = 10
     x[1, 0] = 100
-    ###########################################################################
-    #                            END OF YOUR CODE                             #
-    ###########################################################################
     return x
 
 
@@ -59,16 +51,10 @@ def mutate_tensor(
     Returns:
         The input tensor x
     """
-    ##########################################################################
-    #                     TODO: Implement this function                      #
-    ##########################################################################
     # 题目说重复index就覆盖成最后那个，直接按顺序写就行
     for k in range(len(indices)):
         i, j = indices[k]
         x[i, j] = values[k]
-    ##########################################################################
-    #                            END OF YOUR CODE                            #
-    ##########################################################################
     return x
 
 
@@ -88,18 +74,10 @@ def count_tensor_elements(x: Tensor) -> int:
     Returns:
         num_elements: An integer giving the number of scalar elements in x
     """
-    num_elements = None
-    ##########################################################################
-    #                      TODO: Implement this function                     #
-    #   You CANNOT use the built-in functions torch.numel(x) or x.numel().   #
-    ##########################################################################
     # 不能用 numel，把各维乘起来
     num_elements = 1
     for s in x.shape:
         num_elements *= s
-    ##########################################################################
-    #                            END OF YOUR CODE                            #
-    ##########################################################################
     return num_elements
 
 
@@ -113,14 +91,7 @@ def create_tensor_of_pi(M: int, N: int) -> Tensor:
     Returns:
         x: A tensor of shape (M, N) filled with the value 3.14
     """
-    x = None
-    ##########################################################################
-    #         TODO: Implement this function. It should take one line.        #
-    ##########################################################################
     x = torch.full((M, N), 3.14)
-    ##########################################################################
-    #                            END OF YOUR CODE                            #
-    ##########################################################################
     return x
 
 
@@ -138,10 +109,6 @@ def multiples_of_ten(start: int, stop: int) -> Tensor:
         x: float64 Tensor giving multiples of ten between start and stop
     """
     assert start <= stop
-    x = None
-    ##########################################################################
-    #                      TODO: Implement this function                     #
-    ##########################################################################
     # 先找到第一个>=start的10的倍数
     s = start
     if s % 10 != 0:
@@ -150,9 +117,6 @@ def multiples_of_ten(start: int, stop: int) -> Tensor:
         x = torch.tensor([], dtype=torch.float64)
     else:
         x = torch.arange(s, stop+1, 10, dtype=torch.float64)
-    ##########################################################################
-    #                            END OF YOUR CODE                            #
-    ##########################################################################
     return x
 
 
@@ -180,20 +144,10 @@ def slice_indexing_practice(x: Tensor) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
     """
     assert x.shape[0] >= 3
     assert x.shape[1] >= 5
-    last_row = None
-    third_col = None
-    first_two_rows_three_cols = None
-    even_rows_odd_cols = None
-    ##########################################################################
-    #                      TODO: Implement this function                     #
-    ##########################################################################
     last_row = x[-1, :]  # 最后一行，一维
     third_col = x[:, 2:3]  # 第三列要保持二维
     first_two_rows_three_cols = x[:2, :3]
     even_rows_odd_cols = x[0::2, 1::2]
-    ##########################################################################
-    #                            END OF YOUR CODE                            #
-    ##########################################################################
     out = (
         last_row,
         third_col,
@@ -229,9 +183,6 @@ def slice_assignment_practice(x: Tensor) -> Tensor:
     Returns:
         x
     """
-    ##########################################################################
-    #                      TODO: Implement this function                     #
-    ##########################################################################
     # 只能slice赋值，而且<=6次
     x[:2, 0] = 0
     x[:2, 1] = 1
@@ -239,9 +190,6 @@ def slice_assignment_practice(x: Tensor) -> Tensor:
     x[2:4, 0:4:2] = 3
     x[2:4, 1:4:2] = 4
     x[2:4, 4:6] = 5
-    ##########################################################################
-    #                            END OF YOUR CODE                            #
-    ##########################################################################
     return x
 
 
@@ -261,15 +209,8 @@ def shuffle_cols(x: Tensor) -> Tensor:
         - The third column of y is the same as the third column of x
         - The fourth column of y is the same as the second column of x
     """
-    y = None
-    ##########################################################################
-    #                      TODO: Implement this function                     #
-    ##########################################################################
     idx = [0, 0, 2, 1]
     y = x[:, idx]
-    ##########################################################################
-    #                            END OF YOUR CODE                            #
-    ##########################################################################
     return y
 
 
@@ -291,15 +232,8 @@ def reverse_rows(x: Tensor) -> Tensor:
             the second row of y should be equal to the second to last row of x,
             and so on.
     """
-    y = None
-    ##########################################################################
-    #                      TODO: Implement this function                     #
-    ##########################################################################
     # 不能用flip，倒着取行
     y = x[torch.arange(x.shape[0]-1, -1, -1)]
-    ##########################################################################
-    #                            END OF YOUR CODE                            #
-    ##########################################################################
     return y
 
 
@@ -320,16 +254,9 @@ def take_one_elem_per_col(x: Tensor) -> Tensor:
         - The second element of y is the first element of the second column of x
         - The third element of y is the fourth element of the third column of x
     """
-    y = None
-    ##########################################################################
-    #                      TODO: Implement this function                     #
-    ##########################################################################
     rows = [1, 0, 3]
     cols = [0, 1, 2]
     y = x[rows, cols]
-    ##########################################################################
-    #                            END OF YOUR CODE                            #
-    ##########################################################################
     return y
 
 
@@ -349,16 +276,9 @@ def make_one_hot(x: List[int]) -> Tensor:
             of x[n]; in other words, if x[n] = c then y[n, c] = 1; all other
             elements of y are zeros. The dtype of y should be torch.float32.
     """
-    y = None
-    ##########################################################################
-    #                      TODO: Implement this function                     #
-    ##########################################################################
     # 不能写for，用fancy index
     y = torch.zeros(len(x), max(x)+1)
     y[torch.arange(len(x)), x] = 1
-    ##########################################################################
-    #                            END OF YOUR CODE                            #
-    ##########################################################################
     return y
 
 
@@ -387,14 +307,7 @@ def sum_positive_entries(x: Tensor) -> Tensor:
     Returns:
         pos_sum: Python integer giving the sum of all positive values in x
     """
-    pos_sum = None
-    ##########################################################################
-    #                      TODO: Implement this function                     #
-    ##########################################################################
     pos_sum = x[x > 0].sum().item()
-    ##########################################################################
-    #                            END OF YOUR CODE                            #
-    ##########################################################################
     return pos_sum
 
 
@@ -417,15 +330,8 @@ def reshape_practice(x: Tensor) -> Tensor:
     Returns:
         y: A reshaped version of x of shape (3, 8) as described above.
     """
-    y = None
-    ##########################################################################
-    #                      TODO: Implement this function                     #
-    ##########################################################################
     # 先拆成两块再拼，试了好几次view才对上
     y = x.view(2, 3, 4).permute(1, 0, 2).contiguous().view(3, 8)
-    ##########################################################################
-    #                            END OF YOUR CODE                            #
-    ##########################################################################
     return y
 
 
@@ -456,16 +362,9 @@ def zero_row_min(x: Tensor) -> Tensor:
         y: Tensor of shape (M, N) that is a copy of x, except the minimum value
             along each row is replaced with 0.
     """
-    y = None
-    ##########################################################################
-    #                      TODO: Implement this function                     #
-    ##########################################################################
     y = x.clone()
     min_idx = y.argmin(dim=1)
     y[torch.arange(y.shape[0]), min_idx] = 0
-    ##########################################################################
-    #                            END OF YOUR CODE                            #
-    ##########################################################################
     return y
 
 
@@ -513,17 +412,10 @@ def batched_matrix_multiply_loop(x: Tensor, y: Tensor) -> Tensor:
             of matrix multiplication between x[i] of shape (N, M) and y[i] of
             shape (M, P). The output z should have the same dtype as x.
     """
-    z = None
-    ###########################################################################
-    #                      TODO: Implement this function                      #
-    ###########################################################################
     z = []
     for i in range(x.shape[0]):
         z.append(x[i].mm(y[i]))
     z = torch.stack(z)
-    ###########################################################################
-    #                           END OF YOUR CODE                              #
-    ###########################################################################
     return z
 
 
@@ -546,14 +438,7 @@ def batched_matrix_multiply_noloop(x: Tensor, y: Tensor) -> Tensor:
             of matrix multiplication between x[i] of shape (N, M) and y[i] of
             shape (M, P). The output z should have the same dtype as x.
     """
-    z = None
-    ###########################################################################
-    #                      TODO: Implement this function                      #
-    ###########################################################################
     z = torch.bmm(x, y)
-    ###########################################################################
-    #                            END OF YOUR CODE                             #
-    ###########################################################################
     return z
 
 
@@ -580,18 +465,11 @@ def normalize_columns(x: Tensor) -> Tensor:
         y: Tensor of shape (M, N) as described above. It should have the same
             dtype as the input x.
     """
-    y = None
-    ##########################################################################
-    #                      TODO: Implement this function                     #
-    ##########################################################################
     # 不让用mean/std，按公式自己算
     n = x.shape[0]
     mean = x.sum(0) / n
     std = (((x - mean)**2).sum(0) / (n-1))**0.5
     y = (x - mean) / std
-    ##########################################################################
-    #                            END OF YOUR CODE                            #
-    ##########################################################################
     return y
 
 
@@ -630,17 +508,10 @@ def mm_on_gpu(x: Tensor, w: Tensor) -> Tensor:
     Returns:
         y: Tensor of shape (A, C) as described above. It should not be in GPU.
     """
-    y = None
-    ##########################################################################
-    #                      TODO: Implement this function                     #
-    ##########################################################################
     # 本机没gpu，这格先不跑
     x_gpu = x.cuda()
     w_gpu = w.cuda()
     y = x_gpu.mm(w_gpu).cpu()
-    ##########################################################################
-    #                            END OF YOUR CODE                            #
-    ##########################################################################
     return y
 
 
@@ -665,17 +536,9 @@ def challenge_mean_tensors(xs: List[Tensor], ls: Tensor) -> Tensor:
         y: Tensor of shape (N, ) with `y[i]` giving the mean of `xs[i]`.
     """
 
-    y = None
-    ##########################################################################
-    # TODO: Implement this function without using `for` loops and store the  #
-    # mean values as a tensor in `y`.                                        #
-    ##########################################################################
     packed = torch.nn.utils.rnn.pad_sequence(list(xs), batch_first=True)
     mask = torch.arange(packed.shape[1], device=packed.device) < ls.view(-1, 1)
     y = (packed * mask).sum(1) / ls.to(packed.dtype)
-    ##########################################################################
-    #                            END OF YOUR CODE                            #
-    ##########################################################################
     return y
 
 
@@ -707,10 +570,6 @@ def challenge_get_uniques(x: torch.Tensor) -> Tuple[Tensor, Tensor]:
     """
 
     uniques, indices = None, None
-    ##########################################################################
-    # TODO: Implement this function without using `for` loops and within     #
-    # O(N) memory.                                                           #
-    ##########################################################################
     # unique按首次出现排
     uniques, inv = torch.unique(x, return_inverse=True)
     pos = torch.arange(x.shape[0], device=x.device)
@@ -719,7 +578,4 @@ def challenge_get_uniques(x: torch.Tensor) -> Tuple[Tensor, Tensor]:
     order = torch.argsort(first)
     uniques = uniques[order]
     indices = first[order]
-    ##########################################################################
-    #                            END OF YOUR CODE                            #
-    ##########################################################################
     return uniques, indices
