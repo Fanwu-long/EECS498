@@ -1,15 +1,8 @@
-﻿# 已完成 · A1 / A2
+﻿# 已完成
 
-本目录是**完成版参考**，与作业练习目录 `A1/`、`A2/` 分开存放。
+这边是我写完的代码，和作业目录分开放。
 
-| 练习目录 | 已完成目录 |
-|---------|-----------|
-| `A1/` | `已完成/A1/` |
-| `A2/` | `已完成/A2/` |
+- A1：pytorch101.py、knn.py
+- A2：linear_classifier.py、two_layer_net.py
 
-## 包含文件
-
-- `A1/pytorch101.py` — PyTorch 张量练习
-- `A1/knn.py` — kNN 分类器
-- `A2/linear_classifier.py` — SVM + Softmax
-- `A2/two_layer_net.py` — 两层神经网络
+A1/ A2/ 那边还是空的 TODO，自己先写。
