@@ -13,5 +13,3 @@
 - `A1/knn.py` — kNN 分类器
 - `A2/linear_classifier.py` — SVM + Softmax
 - `A2/two_layer_net.py` — 两层神经网络
-
-建议：先在 `A1/`、`A2/` 自己写；卡住再对照这里。对照时尽量理解公式与梯度，不要整文件粘贴。
