@@ -12,10 +12,8 @@ from torch.nn import functional as F
 from torchvision import models
 from torchvision.models import feature_extraction
 
-
 def hello_common():
     print("Hello from common.py!")
-
 
 class DetectorBackboneWithFPN(nn.Module):
     r"""
@@ -37,14 +35,8 @@ class DetectorBackboneWithFPN(nn.Module):
         super().__init__()
         self.out_channels = out_channels
 
-        # Initialize with ImageNet pre-trained weights.
         _cnn = models.regnet_x_400mf(pretrained=True)
 
-        # Torchvision models only return features from the last level. Detector
-        # backbones (with FPN) require intermediate features of different scales.
-        # So we wrap the ConvNet with torchvision's feature extractor. Here we
-        # will get output features with names (c3, c4, c5) with same stride as
-        # (p3, p4, p5) described above.
         self.backbone = feature_extraction.create_feature_extractor(
             _cnn,
             return_nodes={
@@ -54,10 +46,6 @@ class DetectorBackboneWithFPN(nn.Module):
             },
         )
 
-        # Pass a dummy batch of input images to infer shapes of (c3, c4, c5).
-        # Features are a dictionary with keys as defined above. Values are
-        # batches of tensors in NCHW format, that give intermediate features
-        # from the backbone network.
         dummy_out = self.backbone(torch.randn(2, 3, 224, 224))
         dummy_out_shapes = [(key, value.shape) for key, value in dummy_out.items()]
 
@@ -65,9 +53,6 @@ class DetectorBackboneWithFPN(nn.Module):
         for level_name, feature_shape in dummy_out_shapes:
             print(f"Shape of {level_name} features: {feature_shape}")
 
-        # This behaves like a Python dict, but makes PyTorch understand that
-        # there are trainable weights inside it.
-        # Add THREE lateral 1x1 conv and THREE output 3x3 conv layers.
         self.fpn_params = nn.ModuleDict()
 
         # 每个尺度：1x1 侧向 + 3x3 输出
@@ -89,7 +74,6 @@ class DetectorBackboneWithFPN(nn.Module):
 
     def forward(self, images: torch.Tensor):
 
-        # Multi-scale features, dictionary with keys: {"c3", "c4", "c5"}.
         backbone_feats = self.backbone(images)
 
         fpn_feats = {"p3": None, "p4": None, "p5": None}
@@ -109,7 +93,6 @@ class DetectorBackboneWithFPN(nn.Module):
         fpn_feats["p5"] = self.fpn_params["output_c5"](m5)
 
         return fpn_feats
-
 
 def get_fpn_location_coords(
     shape_per_fpn_level: Dict[str, Tuple],
@@ -137,7 +120,6 @@ def get_fpn_location_coords(
             centers of receptive fields of the FPN locations, on input image.
     """
 
-    # Set these to `(N, 2)` Tensors giving absolute location co-ordinates.
     location_coords = {
         level_name: None for level_name, _ in shape_per_fpn_level.items()
     }
@@ -155,7 +137,6 @@ def get_fpn_location_coords(
         coords = torch.stack([grid_x.reshape(-1), grid_y.reshape(-1)], dim=1)
         location_coords[level_name] = coords
     return location_coords
-
 
 def nms(boxes: torch.Tensor, scores: torch.Tensor, iou_threshold: float = 0.5):
     """
@@ -199,7 +180,6 @@ def nms(boxes: torch.Tensor, scores: torch.Tensor, iou_threshold: float = 0.5):
         order = rest[iou <= iou_threshold]
     keep = torch.tensor(keep_list, dtype=torch.long, device=boxes.device)
     return keep
-
 
 def class_spec_nms(
     boxes: torch.Tensor,

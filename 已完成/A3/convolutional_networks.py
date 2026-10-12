@@ -6,14 +6,12 @@ import torch
 from a3_helper import softmax_loss
 from fully_connected_networks import Linear_ReLU, Linear, Solver, adam, ReLU
 
-
 def hello_convolutional_networks():
     """
     This is a sample function that we will try to import and run to ensure that
     our environment is correctly set up on Google Colab.
     """
     print('Hello from convolutional_networks.py!')
-
 
 class Conv(object):
     # 卷积手写，naive双重循环够用
@@ -107,7 +105,6 @@ class Conv(object):
         dx = dxpad[:, :, pad:pad + H, pad:pad + W]
         return dx, dw, db
 
-
 class MaxPool(object):
     # 池化记住argmax给反传用
 
@@ -176,7 +173,6 @@ class MaxPool(object):
                 mask = mask.reshape(N, C, ph, pw)
                 dx[:, :, hs:hs + ph, ws:ws + pw] += mask * dout[:, :, i, j].reshape(N, C, 1, 1)
         return dx
-
 
 class ThreeLayerConvNet(object):
     """
@@ -257,12 +253,9 @@ class ThreeLayerConvNet(object):
         W2, b2 = self.params['W2'], self.params['b2']
         W3, b3 = self.params['W3'], self.params['b3']
 
-        # pass conv_param to the forward pass for the convolutional layer
-        # Padding and stride chosen to preserve the input spatial size
         filter_size = W1.shape[2]
         conv_param = {'stride': 1, 'pad': (filter_size - 1) // 2}
 
-        # pass pool_param to the forward pass for the max-pooling layer
         pool_param = {'pool_height': 2, 'pool_width': 2, 'stride': 2}
 
         out1, cache1 = Conv_ReLU_Pool.forward(
@@ -290,7 +283,6 @@ class ThreeLayerConvNet(object):
         grads['b1'] = db1
 
         return loss, grads
-
 
 class DeepConvNet(object):
     """
@@ -381,7 +373,6 @@ class DeepConvNet(object):
                 cur_W //= 2
             prev_C = F
 
-        # Final fully-connected layer.
         fc_in = prev_C * cur_H * cur_W
         last = self.num_layers
         if use_kaiming:
@@ -394,28 +385,21 @@ class DeepConvNet(object):
         self.params['b%d' % last] = torch.zeros(
             num_classes, dtype=dtype, device=device)
 
-        # With batch normalization we need to keep track of running
-        # means and variances, so we need to pass a special bn_param
-        # self.bn_params[0] to the forward pass of the first batch
-        # normalization layer, self.bn_params[1] to the forward
-        # pass of the second batch normalization layer, etc.
         self.bn_params = []
         if self.batchnorm:
             self.bn_params = [{'mode': 'train'}
                               for _ in range(len(num_filters))]
 
-        # Check that we got the right number of parameters
         if not self.batchnorm:
-            params_per_macro_layer = 2  # weight and bias
+            params_per_macro_layer = 2
         else:
-            params_per_macro_layer = 4  # weight, bias, scale, shift
+            params_per_macro_layer = 4
         num_params = params_per_macro_layer * len(num_filters) + 2
         msg = 'self.params has the wrong number of ' \
               'elements. Got %d; expected %d'
         msg = msg % (len(self.params), num_params)
         assert len(self.params) == num_params, msg
 
-        # Check that all parameters have the correct device and dtype:
         for k, param in self.params.items():
             msg = 'param "%s" has device %r; should be %r' \
                   % (k, param.device, device)
@@ -467,20 +451,13 @@ class DeepConvNet(object):
         X = X.to(self.dtype)
         mode = 'test' if y is None else 'train'
 
-        # Set train/test mode for batchnorm params since they
-        # behave differently during training and testing.
         if self.batchnorm:
             for bn_param in self.bn_params:
                 bn_param['mode'] = mode
 
-        # pass conv_param to the forward pass for the
-        # convolutional layer
-        # Padding and stride chosen to preserve the input
-        # spatial size
         filter_size = 3
         conv_param = {'stride': 1, 'pad': (filter_size - 1) // 2}
 
-        # pass pool_param to the forward pass for the max-pooling layer
         pool_param = {'pool_height': 2, 'pool_width': 2, 'stride': 2}
 
         caches = []
@@ -552,12 +529,10 @@ class DeepConvNet(object):
 
         return loss, grads
 
-
 def find_overfit_parameters():
-    weight_scale = 1e-1   # Experiment with this!
-    learning_rate = 1e-3  # Experiment with this!
+    weight_scale = 1e-1
+    learning_rate = 1e-3
     return weight_scale, learning_rate
-
 
 def create_convolutional_solver_instance(data_dict, dtype, device):
     model = None
@@ -581,7 +556,6 @@ def create_convolutional_solver_instance(data_dict, dtype, device):
         device=device,
     )
     return solver
-
 
 def kaiming_initializer(Din, Dout, K=None, relu=True, device='cpu',
                         dtype=torch.float32):
@@ -616,7 +590,6 @@ def kaiming_initializer(Din, Dout, K=None, relu=True, device='cpu',
         std = (gain / fan_in) ** 0.5
         weight = std * torch.randn(Dout, Din, K, K, dtype=dtype, device=device)
     return weight
-
 
 class BatchNorm(object):
     # train/test 分支别搞混
@@ -764,7 +737,6 @@ class BatchNorm(object):
 
         return dx, dgamma, dbeta
 
-
 class SpatialBatchNorm(object):
 
     @staticmethod
@@ -796,7 +768,6 @@ class SpatialBatchNorm(object):
         out, cache = None, None
 
         N, C, H, W = x.shape
-        # Move channels to the last axis and flatten spatial dims into batch.
         x_flat = x.permute(0, 2, 3, 1).reshape(-1, C)
         out_flat, cache = BatchNorm.forward(x_flat, gamma, beta, bn_param)
         out = out_flat.reshape(N, H, W, C).permute(0, 3, 1, 2)
@@ -823,7 +794,6 @@ class SpatialBatchNorm(object):
         dx = dx_flat.reshape(N, H, W, C).permute(0, 3, 1, 2)
 
         return dx, dgamma, dbeta
-
 
 class FastConv(object):
 
@@ -856,7 +826,6 @@ class FastConv(object):
                          torch.zeros_like(layer.bias)
         return dx, dw, db
 
-
 class FastMaxPool(object):
 
     @staticmethod
@@ -882,7 +851,6 @@ class FastMaxPool(object):
         except RuntimeError:
             dx = torch.zeros_like(tx)
         return dx
-
 
 class Conv_ReLU(object):
 
@@ -913,7 +881,6 @@ class Conv_ReLU(object):
         da = ReLU.backward(dout, relu_cache)
         dx, dw, db = FastConv.backward(da, conv_cache)
         return dx, dw, db
-
 
 class Conv_ReLU_Pool(object):
 
@@ -948,7 +915,6 @@ class Conv_ReLU_Pool(object):
         da = ReLU.backward(ds, relu_cache)
         dx, dw, db = FastConv.backward(da, conv_cache)
         return dx, dw, db
-
 
 class Linear_BatchNorm_ReLU(object):
 
@@ -987,7 +953,6 @@ class Linear_BatchNorm_ReLU(object):
         dx, dw, db = Linear.backward(da, fc_cache)
         return dx, dw, db, dgamma, dbeta
 
-
 class Conv_BatchNorm_ReLU(object):
 
     @staticmethod
@@ -1006,7 +971,6 @@ class Conv_BatchNorm_ReLU(object):
         da, dgamma, dbeta = SpatialBatchNorm.backward(dan, bn_cache)
         dx, dw, db = FastConv.backward(da, conv_cache)
         return dx, dw, db, dgamma, dbeta
-
 
 class Conv_BatchNorm_ReLU_Pool(object):
 
