@@ -7,4 +7,3 @@
 - A3：fully_connected_networks.py、convolutional_networks.py
 - A4：common.py、one_stage_detector.py、two_stage_detector.py
 
-A1/～A4/ 那边还是空的 TODO，自己先写。
