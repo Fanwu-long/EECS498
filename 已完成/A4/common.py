@@ -70,14 +70,12 @@ class DetectorBackboneWithFPN(nn.Module):
         # Add THREE lateral 1x1 conv and THREE output 3x3 conv layers.
         self.fpn_params = nn.ModuleDict()
 
-        # dummy_out_shapes is [("c3", shape), ("c4", shape), ("c5", shape)].
+        # 每个尺度：1x1 侧向 + 3x3 输出
         for level_name, feat_shape in dummy_out_shapes:
             in_ch = feat_shape[1]
-            # Lateral 1x1 conv projects each level to `out_channels`.
-            self.fpn_params[f"lateral_{level_name}"] = nn.Conv2d(
+            self.fpn_params["lateral_" + level_name] = nn.Conv2d(
                 in_ch, out_channels, kernel_size=1, stride=1, padding=0)
-            # Output 3x3 conv (stride 1, pad 1 preserves spatial size).
-            self.fpn_params[f"output_{level_name}"] = nn.Conv2d(
+            self.fpn_params["output_" + level_name] = nn.Conv2d(
                 out_channels, out_channels, kernel_size=3, stride=1, padding=1)
 
     @property
@@ -95,16 +93,17 @@ class DetectorBackboneWithFPN(nn.Module):
         backbone_feats = self.backbone(images)
 
         fpn_feats = {"p3": None, "p4": None, "p5": None}
-        c3, c4, c5 = backbone_feats["c3"], backbone_feats["c4"], backbone_feats["c5"]
-        # Lateral projections.
+        c3 = backbone_feats["c3"]
+        c4 = backbone_feats["c4"]
+        c5 = backbone_feats["c5"]
+        # 侧向 1x1
         l3 = self.fpn_params["lateral_c3"](c3)
         l4 = self.fpn_params["lateral_c4"](c4)
         l5 = self.fpn_params["lateral_c5"](c5)
-        # Top-down merge: upsample coarser level and add.
+        # 自上而下：粗的 upsample 再加到细的上
         m5 = l5
         m4 = l4 + F.interpolate(m5, size=l4.shape[-2:], mode="nearest")
         m3 = l3 + F.interpolate(m4, size=l3.shape[-2:], mode="nearest")
-        # Output 3x3 convs.
         fpn_feats["p3"] = self.fpn_params["output_c3"](m3)
         fpn_feats["p4"] = self.fpn_params["output_c4"](m4)
         fpn_feats["p5"] = self.fpn_params["output_c5"](m5)
@@ -147,14 +146,14 @@ def get_fpn_location_coords(
         level_stride = strides_per_fpn_level[level_name]
 
         _, _, H, W = feat_shape
+        # 格子中心映射回原图坐标： (i+0.5)*stride
         ys = torch.arange(H, dtype=dtype, device=device)
         xs = torch.arange(W, dtype=dtype, device=device)
-        # Center of each receptive field on the input image.
         yc = (ys + 0.5) * level_stride
         xc = (xs + 0.5) * level_stride
-        grid_y, grid_x = torch.meshgrid(yc, xc, indexing="ij")   # (H, W)
+        grid_y, grid_x = torch.meshgrid(yc, xc, indexing="ij")
         coords = torch.stack([grid_x.reshape(-1), grid_y.reshape(-1)], dim=1)
-        location_coords[level_name] = coords                     # (H*W, 2)
+        location_coords[level_name] = coords
     return location_coords
 
 
@@ -177,28 +176,26 @@ def nms(boxes: torch.Tensor, scores: torch.Tensor, iou_threshold: float = 0.5):
     if (not boxes.numel()) or (not scores.numel()):
         return torch.zeros(0, dtype=torch.long)
 
-    keep = None
-    # github.com/pytorch/vision/blob/main/torchvision/csrc/ops/cpu/nms_kernel.cpp
-    x1, y1, x2, y2 = boxes[:, 0], boxes[:, 1], boxes[:, 2], boxes[:, 3]
+    # 按分数从高到低抠，重叠太大的扔掉
+    x1 = boxes[:, 0]
+    y1 = boxes[:, 1]
+    x2 = boxes[:, 2]
+    y2 = boxes[:, 3]
     areas = (x2 - x1).clamp(min=0) * (y2 - y1).clamp(min=0)
     order = scores.argsort(descending=True)
     keep_list = []
     while order.numel() > 0:
-        i = order[0].item()
+        i = int(order[0])
         keep_list.append(i)
         if order.numel() == 1:
             break
         rest = order[1:]
-        # Intersection of box i with all remaining boxes.
         xx1 = torch.maximum(x1[i], x1[rest])
         yy1 = torch.maximum(y1[i], y1[rest])
         xx2 = torch.minimum(x2[i], x2[rest])
         yy2 = torch.minimum(y2[i], y2[rest])
-        w = (xx2 - xx1).clamp(min=0)
-        h = (yy2 - yy1).clamp(min=0)
-        inter = w * h
+        inter = (xx2 - xx1).clamp(min=0) * (yy2 - yy1).clamp(min=0)
         iou = inter / (areas[i] + areas[rest] - inter)
-        # Keep only boxes with IoU <= threshold.
         order = rest[iou <= iou_threshold]
     keep = torch.tensor(keep_list, dtype=torch.long, device=boxes.device)
     return keep

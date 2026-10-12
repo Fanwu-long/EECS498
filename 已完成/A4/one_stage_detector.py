@@ -53,19 +53,22 @@ class FCOSPredictionNetwork(nn.Module):
         # that size of input features remains same: remember we need predictions
         # at every location in feature map, we shouldn't "lose" any locations.
         # Fill these.
+        # cls / box 两条 stem，结构一样但参数不共享
         stem_cls = []
         stem_box = []
-        prev_ch = in_channels
-        for out_ch in stem_channels:
-            for stem in (stem_cls, stem_box):
-                conv = nn.Conv2d(prev_ch, out_ch, kernel_size=3, stride=1, padding=1)
-                nn.init.normal_(conv.weight, mean=0.0, std=0.01)
-                nn.init.constant_(conv.bias, 0.0)
-                stem.append(conv)
-                stem.append(nn.ReLU())
-            prev_ch = out_ch
+        prev = in_channels
+        for ch in stem_channels:
+            c1 = nn.Conv2d(prev, ch, kernel_size=3, stride=1, padding=1)
+            nn.init.normal_(c1.weight, mean=0, std=0.01)
+            nn.init.constant_(c1.bias, 0)
+            stem_cls += [c1, nn.ReLU()]
 
-        # Wrap the layers defined by student into a `nn.Sequential` module:
+            c2 = nn.Conv2d(prev, ch, kernel_size=3, stride=1, padding=1)
+            nn.init.normal_(c2.weight, mean=0, std=0.01)
+            nn.init.constant_(c2.bias, 0)
+            stem_box += [c2, nn.ReLU()]
+            prev = ch
+
         self.stem_cls = nn.Sequential(*stem_cls)
         self.stem_box = nn.Sequential(*stem_box)
 
@@ -80,14 +83,14 @@ class FCOSPredictionNetwork(nn.Module):
         # inference, logits are converted to probabilities by applying sigmoid,
         # BUT OUTSIDE this module.
 
-        # Replace these lines with your code, keep variable names unchanged.
+        # 三个头：分类 / 框 / centerness
         last_ch = stem_channels[-1]
-        self.pred_cls = nn.Conv2d(last_ch, num_classes, kernel_size=3, stride=1, padding=1)
-        self.pred_box = nn.Conv2d(last_ch, 4, kernel_size=3, stride=1, padding=1)
-        self.pred_ctr = nn.Conv2d(last_ch, 1, kernel_size=3, stride=1, padding=1)
-        for layer in (self.pred_cls, self.pred_box, self.pred_ctr):
-            nn.init.normal_(layer.weight, mean=0.0, std=0.01)
-            nn.init.constant_(layer.bias, 0.0)
+        self.pred_cls = nn.Conv2d(last_ch, num_classes, 3, padding=1)
+        self.pred_box = nn.Conv2d(last_ch, 4, 3, padding=1)
+        self.pred_ctr = nn.Conv2d(last_ch, 1, 3, padding=1)
+        for layer in [self.pred_cls, self.pred_box, self.pred_ctr]:
+            nn.init.normal_(layer.weight, mean=0, std=0.01)
+            nn.init.constant_(layer.bias, 0)
 
         # OVERRIDE: Use a negative bias in `pred_cls` to improve training
         # stability. Without this, the training will most likely diverge.
@@ -129,10 +132,10 @@ class FCOSPredictionNetwork(nn.Module):
             B = feat.shape[0]
             cls_feat = self.stem_cls(feat)
             box_feat = self.stem_box(feat)
-            cls = self.pred_cls(cls_feat)       # (B, num_classes, H, W)
-            box = self.pred_box(box_feat)       # (B, 4, H, W)
-            ctr = self.pred_ctr(box_feat)       # (B, 1, H, W)
-            # Move channels last and flatten (H, W).
+            cls = self.pred_cls(cls_feat)
+            box = self.pred_box(box_feat)
+            ctr = self.pred_ctr(box_feat)
+            # 通道挪到最后，再把 H*W 摊平，方便算 loss
             class_logits[level_name] = cls.permute(0, 2, 3, 1).reshape(B, -1, cls.shape[1])
             boxreg_deltas[level_name] = box.permute(0, 2, 3, 1).reshape(B, -1, 4)
             centerness_logits[level_name] = ctr.permute(0, 2, 3, 1).reshape(B, -1, 1)
@@ -264,16 +267,17 @@ def fcos_get_deltas_from_locations(
     # from the locations to GT box edges, normalized by FPN stride.
     deltas = None
 
-    xc, yc = locations[:, 0], locations[:, 1]
-    x1, y1, x2, y2 = gt_boxes[:, 0], gt_boxes[:, 1], gt_boxes[:, 2], gt_boxes[:, 3]
-    left = xc - x1
-    top = yc - y1
-    right = x2 - xc
-    bottom = y2 - yc
+    # LTRB = 点到框四边的距离，再除以 stride
+    xc = locations[:, 0]
+    yc = locations[:, 1]
+    left = xc - gt_boxes[:, 0]
+    top = yc - gt_boxes[:, 1]
+    right = gt_boxes[:, 2] - xc
+    bottom = gt_boxes[:, 3] - yc
     deltas = torch.stack([left, top, right, bottom], dim=1) / stride
-    # Background boxes (all -1) => deltas of -1.
-    background = (gt_boxes[:, :4] == -1).all(dim=1)
-    deltas[background] = -1.0
+    # 背景框全是 -1，delta 也写成 -1
+    bg = (gt_boxes[:, :4] == -1).all(dim=1)
+    deltas[bg] = -1
 
     return deltas
 
@@ -304,12 +308,14 @@ def fcos_apply_deltas_to_locations(
             Same shape as deltas and locations, giving co-ordinates of the
             resulting boxes `(x1, y1, x2, y2)`, absolute in image dimensions.
     """
-    deltas = deltas.clamp(min=0) * stride
-    xc, yc = locations[:, 0], locations[:, 1]
-    x1 = xc - deltas[:, 0]
-    y1 = yc - deltas[:, 1]
-    x2 = xc + deltas[:, 2]
-    y2 = yc + deltas[:, 3]
+    # 推理：delta 先乘回 stride，再从中心推回 xyxy
+    d = deltas.clamp(min=0) * stride
+    xc = locations[:, 0]
+    yc = locations[:, 1]
+    x1 = xc - d[:, 0]
+    y1 = yc - d[:, 1]
+    x2 = xc + d[:, 2]
+    y2 = yc + d[:, 3]
     output_boxes = torch.stack([x1, y1, x2, y2], dim=1)
 
     return output_boxes
@@ -332,17 +338,17 @@ def fcos_make_centerness_targets(deltas: torch.Tensor):
         torch.Tensor
             Tensor of shape `(N, )` giving centerness regression targets.
     """
-    centerness = None
-    left, top, right, bottom = deltas[:, 0], deltas[:, 1], deltas[:, 2], deltas[:, 3]
-    lr_min = torch.minimum(left, right)
-    lr_max = torch.maximum(left, right)
-    tb_min = torch.minimum(top, bottom)
-    tb_max = torch.maximum(top, bottom)
+    # 公式：sqrt( min(l,r)/max(l,r) * min(t,b)/max(t,b) )
+    l = deltas[:, 0]
+    t = deltas[:, 1]
+    r = deltas[:, 2]
+    b = deltas[:, 3]
     centerness = torch.sqrt(
-        (lr_min * tb_min) / (lr_max * tb_max).clamp(min=1e-8))
-    # Background (deltas all -1) => centerness of -1.
-    background = (deltas == -1).all(dim=1)
-    centerness[background] = -1.0
+        (torch.minimum(l, r) / torch.maximum(l, r).clamp(min=1e-8))
+        * (torch.minimum(t, b) / torch.maximum(t, b).clamp(min=1e-8))
+    )
+    bg = (deltas == -1).all(dim=1)
+    centerness[bg] = -1
 
     return centerness
 

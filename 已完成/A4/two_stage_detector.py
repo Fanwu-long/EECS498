@@ -55,30 +55,29 @@ class RPNPredictionNetwork(nn.Module):
         # at every location in feature map, we shouldn't "lose" any locations.
         # Fill this list. It is okay to use your implementation from
         # `FCOSPredictionNetwork` for this code block.
+        # RPN 一条 stem 共用
         stem_rpn = []
-        prev_ch = in_channels
-        for out_ch in stem_channels:
-            conv = nn.Conv2d(prev_ch, out_ch, kernel_size=3, stride=1, padding=1)
-            nn.init.normal_(conv.weight, mean=0.0, std=0.01)
-            nn.init.constant_(conv.bias, 0.0)
+        prev = in_channels
+        for ch in stem_channels:
+            conv = nn.Conv2d(prev, ch, kernel_size=3, stride=1, padding=1)
+            nn.init.normal_(conv.weight, mean=0, std=0.01)
+            nn.init.constant_(conv.bias, 0)
             stem_rpn.append(conv)
             stem_rpn.append(nn.ReLU())
-            prev_ch = out_ch
-
-        # Wrap the layers defined by student into a `nn.Sequential` module:
+            prev = ch
         self.stem_rpn = nn.Sequential(*stem_rpn)
         # objectness and box deltas for every anchor, at every location.
         # Objectness is obtained by applying sigmoid to its logits. However,
         # DO NOT initialize a sigmoid module here. PyTorch loss functions have
         # numerically stable implementations with logits.
 
-        # Replace these lines with your code, keep variable names unchanged.
         last_ch = stem_channels[-1]
+        # 1x1 出 objectness 和 4*A 个 delta
         self.pred_obj = nn.Conv2d(last_ch, num_anchors, kernel_size=1)
         self.pred_box = nn.Conv2d(last_ch, 4 * num_anchors, kernel_size=1)
-        for layer in (self.pred_obj, self.pred_box):
-            nn.init.normal_(layer.weight, mean=0.0, std=0.01)
-            nn.init.constant_(layer.bias, 0.0)
+        for layer in [self.pred_obj, self.pred_box]:
+            nn.init.normal_(layer.weight, mean=0, std=0.01)
+            nn.init.constant_(layer.bias, 0)
 
     def forward(self, feats_per_fpn_level: TensorDict) -> List[TensorDict]:
         """
@@ -107,9 +106,9 @@ class RPNPredictionNetwork(nn.Module):
         for level_name, feat in feats_per_fpn_level.items():
             B, _, H, W = feat.shape
             stem = self.stem_rpn(feat)
-            obj = self.pred_obj(stem)       # (B, A, H, W)
-            box = self.pred_box(stem)       # (B, 4A, H, W)
-            # Flatten to (B, H*W*A) and (B, H*W*A, 4).
+            obj = self.pred_obj(stem)
+            box = self.pred_box(stem)
+            # 摊成 (B, H*W*A) / (B, H*W*A, 4)
             obj = obj.permute(0, 2, 3, 1).reshape(B, H * W * A)
             box = box.permute(0, 2, 3, 1).reshape(B, H * W * A, 4)
             object_logits[level_name] = obj

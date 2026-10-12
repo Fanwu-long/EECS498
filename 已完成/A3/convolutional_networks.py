@@ -51,14 +51,15 @@ class Conv(object):
         H_out = 1 + (H + 2 * pad - HH) // stride
         W_out = 1 + (W + 2 * pad - WW) // stride
 
+        # pad 完再滑窗，naive 双重循环
         xpad = torch.nn.functional.pad(x, (pad, pad, pad, pad))
         out = x.new_zeros(N, F, H_out, W_out)
         for i in range(H_out):
             for j in range(W_out):
-                hs, ws = i * stride, j * stride
-                # (N, C, HH, WW) receptive field
+                hs = i * stride
+                ws = j * stride
                 window = xpad[:, :, hs:hs + HH, ws:ws + WW]
-                # (N, F): sum over C,HH,WW of window * each filter
+                # 每个 filter 跟窗口点乘再加 bias
                 out[:, :, i, j] = (
                     window.reshape(N, 1, C, HH, WW)
                     * w.reshape(1, F, C, HH, WW)
@@ -94,17 +95,13 @@ class Conv(object):
         for i in range(H_out):
             for j in range(W_out):
                 hs, ws = i * stride, j * stride
-                window = xpad[:, :, hs:hs + HH, ws:ws + WW]  # (N, C, HH, WW)
-                d = dout[:, :, i, j]                          # (N, F)
-                # dw += sum_n outer(d[n], window[n])
-                dw += (
-                    d.reshape(N, F, 1, 1, 1)
-                    * window.reshape(N, 1, C, HH, WW)
-                ).sum(dim=0)
-                # dxpad window += sum_f d[:,f] * w[f]
+                window = xpad[:, :, hs:hs + HH, ws:ws + WW]
+                d = dout[:, :, i, j]
+                # dw：上游 * 对应窗口
+                dw += (d.reshape(N, F, 1, 1, 1) * window.reshape(N, 1, C, HH, WW)).sum(dim=0)
+                # dx：上游 * filter
                 dxpad[:, :, hs:hs + HH, ws:ws + WW] += (
-                    d.reshape(N, F, 1, 1, 1)
-                    * w.reshape(1, F, C, HH, WW)
+                    d.reshape(N, F, 1, 1, 1) * w.reshape(1, F, C, HH, WW)
                 ).sum(dim=1)
 
         dx = dxpad[:, :, pad:pad + H, pad:pad + W]
@@ -143,7 +140,9 @@ class MaxPool(object):
             for j in range(W_out):
                 hs, ws = i * stride, j * stride
                 window = x[:, :, hs:hs + ph, ws:ws + pw]
-                out[:, :, i, j] = window.reshape(N, C, -1).max(dim=2).values
+                # 每个 channel 取窗口里最大的
+                flat = window.reshape(N, C, -1)
+                out[:, :, i, j] = flat.max(dim=2)[0]
         cache = (x, pool_param)
         return out, cache
 
@@ -166,16 +165,16 @@ class MaxPool(object):
         for i in range(H_out):
             for j in range(W_out):
                 hs, ws = i * stride, j * stride
-                window = x[:, :, hs:hs + ph, ws:ws + pw]      # (N, C, ph, pw)
+                window = x[:, :, hs:hs + ph, ws:ws + pw]
                 flat = window.reshape(N, C, -1)
-                max_idx = flat.argmax(dim=2)                  # (N, C)
+                # 只把梯度塞回当时取 max 的那个位置
+                max_idx = flat.argmax(dim=2)
                 mask = torch.zeros_like(flat)
-                nn, cc = torch.meshgrid(
-                    torch.arange(N), torch.arange(C), indexing='ij')
-                mask[nn, cc, max_idx] = 1.0
+                bat = torch.arange(N).reshape(N, 1).expand(N, C)
+                ch = torch.arange(C).reshape(1, C).expand(N, C)
+                mask[bat, ch, max_idx] = 1
                 mask = mask.reshape(N, C, ph, pw)
-                dx[:, :, hs:hs + ph, ws:ws + pw] += (
-                    mask * dout[:, :, i, j].reshape(N, C, 1, 1))
+                dx[:, :, hs:hs + ph, ws:ws + pw] += mask * dout[:, :, i, j].reshape(N, C, 1, 1)
         return dx
 
 
@@ -219,12 +218,11 @@ class ThreeLayerConvNet(object):
         self.dtype = dtype
 
         C, H, W = input_dims
-        # Conv layer preserves spatial size; 2x2 pool halves it.
+        # conv 用 same pad，pool 之后高宽砍半
         self.params['W1'] = weight_scale * torch.randn(
             num_filters, C, filter_size, filter_size,
             dtype=dtype, device=device)
         self.params['b1'] = torch.zeros(num_filters, dtype=dtype, device=device)
-        # After conv (same padding) + 2x2 pool: feature map is num_filters x H/2 x W/2
         conv_out_dim = num_filters * (H // 2) * (W // 2)
         self.params['W2'] = weight_scale * torch.randn(
             conv_out_dim, hidden_dim, dtype=dtype, device=device)
@@ -522,15 +520,14 @@ class DeepConvNet(object):
         loss, grads = 0, {}
         loss, dscores = softmax_loss(scores, y)
         L = self.num_layers
-        # L2 regularization over all conv/fc weights.
+        # 正则没写 1/2，梯度就加 2regW
         for i in range(L):
             W = self.params['W%d' % (i + 1)]
             loss += self.reg * torch.sum(W * W)
 
-        # Backprop through final linear layer.
         cache = caches.pop()
         dout, dW, db = Linear.backward(dscores, cache)
-        grads['W%d' % L] = dW + 2.0 * self.reg * self.params['W%d' % L]
+        grads['W%d' % L] = dW + 2 * self.reg * self.params['W%d' % L]
         grads['b%d' % L] = db
 
         for i in range(L - 2, -1, -1):
@@ -550,7 +547,7 @@ class DeepConvNet(object):
                     dout, dW, db = Conv_ReLU_Pool.backward(dout, cache)
                 else:
                     dout, dW, db = Conv_ReLU.backward(dout, cache)
-            grads['W%d' % (i + 1)] = dW + 2.0 * self.reg * self.params['W%d' % (i + 1)]
+            grads['W%d' % (i + 1)] = dW + 2 * self.reg * self.params['W%d' % (i + 1)]
             grads['b%d' % (i + 1)] = db
 
         return loss, grads
@@ -682,15 +679,18 @@ class BatchNorm(object):
 
         out, cache = None, None
         if mode == 'train':
-            sample_mean = x.mean(dim=0)                      # (D,)
-            sample_var = x.var(dim=0, unbiased=False)        # (D,)
+            # 当前 batch 的均值方差（用有偏的，跟课件一致）
+            sample_mean = x.mean(dim=0)
+            sample_var = x.var(dim=0, unbiased=False)
             std = torch.sqrt(sample_var + eps)
             x_hat = (x - sample_mean) / std
             out = gamma * x_hat + beta
+            # running 用 momentum 慢慢更新
             running_mean = momentum * running_mean + (1 - momentum) * sample_mean
             running_var = momentum * running_var + (1 - momentum) * sample_var
             cache = (x, x_hat, sample_mean, sample_var, std, gamma, beta, eps)
         elif mode == 'test':
+            # 测试别再用 batch 统计
             x_hat = (x - running_mean) / torch.sqrt(running_var + eps)
             out = gamma * x_hat + beta
         else:
@@ -728,11 +728,10 @@ class BatchNorm(object):
         dbeta = dout.sum(dim=0)
         dgamma = (dout * x_hat).sum(dim=0)
 
-        dx_hat = dout * gamma                              # (N, D)
-        dvar = (dx_hat * (x - sample_mean) * -0.5
-                * std.pow(-3)).sum(dim=0)                  # (D,)
-        dmean = (dx_hat * -1.0 / std).sum(dim=0) \
-            + dvar * (-2.0 / N) * (x - sample_mean).sum(dim=0)
+        # 按计算图一步步推，有点烦但能对上
+        dx_hat = dout * gamma
+        dvar = (dx_hat * (x - sample_mean) * (-0.5) * std.pow(-3)).sum(dim=0)
+        dmean = (dx_hat * (-1.0) / std).sum(dim=0) + dvar * (-2.0 / N) * (x - sample_mean).sum(dim=0)
         dx = dx_hat / std + dvar * 2.0 * (x - sample_mean) / N + dmean / N
 
         return dx, dgamma, dbeta
@@ -758,11 +757,9 @@ class BatchNorm(object):
         dbeta = dout.sum(dim=0)
         dgamma = (dout * x_hat).sum(dim=0)
         dx_hat = dout * gamma
-        # Simplified closed-form gradient (see BN paper / cs231n).
+        # 化简版，笔记本 hint 里那一坨
         dx = (1.0 / (N * std)) * (
-            N * dx_hat
-            - dx_hat.sum(dim=0)
-            - x_hat * (dx_hat * x_hat).sum(dim=0)
+            N * dx_hat - dx_hat.sum(dim=0) - x_hat * (dx_hat * x_hat).sum(dim=0)
         )
 
         return dx, dgamma, dbeta
