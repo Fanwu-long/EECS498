@@ -4,5 +4,7 @@
 
 - A1：pytorch101.py、knn.py
 - A2：linear_classifier.py、two_layer_net.py
+- A3：fully_connected_networks.py、convolutional_networks.py
+- A4：common.py、one_stage_detector.py、two_stage_detector.py
 
-A1/ A2/ 那边还是空的 TODO，自己先写。
+A1/～A4/ 那边还是空的 TODO，自己先写。
