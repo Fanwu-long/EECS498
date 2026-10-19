@@ -177,7 +177,7 @@ def rnn_forward(x, h0, Wx, Wh, b):
         caches.append(step_cache)
 
     h = torch.stack(hs, dim=1)
-    cache = (caches, x)
+    cache = (caches, x, b)
 
     return h, cache
 
@@ -203,12 +203,12 @@ def rnn_backward(dh, cache):
     """
     dx, dh0, dWx, dWh, db = None, None, None, None, None
 
-    caches, x = cache
+    caches, x, b = cache
     N, T, _ = x.shape
     dx = torch.zeros_like(x)
     dWx = torch.zeros_like(caches[0][2])
     dWh = torch.zeros_like(caches[0][3])
-    db = torch.zeros_like(caches[0][4] if len(caches[0]) > 4 else caches[0][2][0])
+    db = torch.zeros_like(b)
 
     dprev_h = torch.zeros_like(dh[:, 0, :])
     for t in reversed(range(T)):
@@ -520,7 +520,8 @@ class CaptioningRNN(nn.Module):
             captions[:, t] = current_word
 
             prev_h = next_h
-            prev_c = next_h if self.cell_type == "rnn" else next_c
+            if self.cell_type != "rnn":
+                prev_c = next_c
 
         if self.cell_type == "attn":
             return captions, attn_weights_all.cpu()
