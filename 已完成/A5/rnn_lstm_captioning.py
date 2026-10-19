@@ -31,23 +31,12 @@ class ImageEncoder(nn.Module):
             verbose: Whether to log expected output shapes during instantiation.
         """
         super().__init__()
-        # newer torchvision silently treats pretrained=... as weights=None,
-        # so pass weights= directly
-        self.cnn = torchvision.models.regnet_x_400mf(
-            weights="DEFAULT" if pretrained else None
-        )
-
-        # Torchvision models return global average pooled features by default.
-        # Our attention-based models may require spatial grid features. So we
-        # wrap the ConvNet with torchvision's feature extractor. We will get
-        # the spatial features right before the final classification layer.
+        # 新版 torchvision 用 weights，pretrained= 会被吃掉
+        w = "DEFAULT" if pretrained else None
+        self.cnn = torchvision.models.regnet_x_400mf(weights=w)
         self.backbone = feature_extraction.create_feature_extractor(
             self.cnn, return_nodes={"trunk_output.block4": "c5"}
         )
-        # We call these features "c5", a name that may sound familiar from the
-        # object detection assignment. :-)
-
-        # Pass a dummy batch of input images to infer output shape.
         dummy_out = self.backbone(torch.randn(2, 3, 224, 224))["c5"]
         self._out_channels = dummy_out.shape[1]
 
@@ -55,10 +44,6 @@ class ImageEncoder(nn.Module):
             print("For input images in NCHW format, shape (2, 3, 224, 224)")
             print(f"Shape of output c5 features: {dummy_out.shape}")
 
-        # Input image batches are expected to be float tensors in range [0, 1].
-        # However, the backbone here expects these tensors to be normalized by
-        # ImageNet color mean/std (as it was trained that way).
-        # We define a function to transform the input images before extraction:
         self.normalize = torchvision.transforms.Normalize(
             mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
         )
@@ -72,24 +57,13 @@ class ImageEncoder(nn.Module):
         return self._out_channels
 
     def forward(self, images: torch.Tensor):
-        # Input images may be uint8 tensors in [0-255], change them to float
-        # tensors in [0-1]. Get float type from backbone (could be float32/64).
         if images.dtype == torch.uint8:
             images = images.to(dtype=self.cnn.stem[0].weight.dtype)
-            images /= 255.0
-
-        # Normalize images by ImageNet color mean/std.
+            images = images / 255.0
         images = self.normalize(images)
-
-        # Extract c5 features from encoder (backbone) and return.
-        # shape: (B, out_channels, H / 32, W / 32)
-        features = self.backbone(images)["c5"]
-        return features
+        return self.backbone(images)["c5"]
 
 
-##############################################################################
-# Recurrent Neural Network                                                   #
-##############################################################################
 def rnn_step_forward(x, prev_h, Wx, Wh, b):
     """
     Run the forward pass for a single timestep of a vanilla RNN that uses a tanh
@@ -109,8 +83,6 @@ def rnn_step_forward(x, prev_h, Wx, Wh, b):
         next_h: Next hidden state, of shape (N, H)
         cache: Tuple of values needed for the backward pass.
     """
-    next_h, cache = None, None
-
     affine = x.mm(Wx) + prev_h.mm(Wh) + b
     next_h = torch.tanh(affine)
     cache = (x, prev_h, Wx, Wh, next_h)
@@ -133,11 +105,8 @@ def rnn_step_backward(dnext_h, cache):
         dWh: Gradients of hidden-to-hidden weights, of shape (H, H)
         db: Gradients of bias vector, of shape (H,)
     """
-    dx, dprev_h, dWx, dWh, db = None, None, None, None, None
-
     x, prev_h, Wx, Wh, next_h = cache
-    # derivative of tanh straight from the output, no need to stash affine
-    daffine = dnext_h * (1 - next_h * next_h)
+    daffine = dnext_h * (1 - next_h * next_h)  # tanh'
 
     dx = daffine.mm(Wx.t())
     dprev_h = daffine.mm(Wh.t())
@@ -166,8 +135,6 @@ def rnn_forward(x, h0, Wx, Wh, b):
         h: Hidden states for the entire timeseries, of shape (N, T, H).
         cache: Values needed in the backward pass
     """
-    h, cache = None, None
-
     hs = []
     caches = []
     prev_h = h0
@@ -201,8 +168,6 @@ def rnn_backward(dh, cache):
         dWh: Gradient of hidden-to-hidden weights, of shape (H, H)
         db: Gradient of biases, of shape (H,)
     """
-    dx, dh0, dWx, dWh, db = None, None, None, None, None
-
     caches, x, b = cache
     N, T, _ = x.shape
     dx = torch.zeros_like(x)
@@ -212,8 +177,7 @@ def rnn_backward(dh, cache):
 
     dprev_h = torch.zeros_like(dh[:, 0, :])
     for t in reversed(range(T)):
-        # upstream at step t = from the loss + passed back from t + 1
-        step_dh = dh[:, t, :] + dprev_h
+        step_dh = dh[:, t, :] + dprev_h  # 本步loss + 后面传回来的
         dxt, dprev_h, dWxt, dWht, dbt = rnn_step_backward(step_dh, caches[t])
         dx[:, t, :] = dxt
         dWx += dWxt
@@ -245,14 +209,8 @@ class RNN(nn.Module):
             hidden_dim: Hidden size, denoted as H before
         """
         super().__init__()
-
-        # Register parameters
-        self.Wx = nn.Parameter(
-            torch.randn(input_dim, hidden_dim).div(math.sqrt(input_dim))
-        )
-        self.Wh = nn.Parameter(
-            torch.randn(hidden_dim, hidden_dim).div(math.sqrt(hidden_dim))
-        )
+        self.Wx = nn.Parameter(torch.randn(input_dim, hidden_dim).div(math.sqrt(input_dim)))
+        self.Wh = nn.Parameter(torch.randn(hidden_dim, hidden_dim).div(math.sqrt(hidden_dim)))
         self.b = nn.Parameter(torch.zeros(hidden_dim))
 
     def forward(self, x, h0):
@@ -298,18 +256,10 @@ class WordEmbedding(nn.Module):
 
     def __init__(self, vocab_size: int, embed_size: int):
         super().__init__()
-
-        # Register parameters
-        self.W_embed = nn.Parameter(
-            torch.randn(vocab_size, embed_size).div(math.sqrt(vocab_size))
-        )
+        self.W_embed = nn.Parameter(torch.randn(vocab_size, embed_size).div(math.sqrt(vocab_size)))
 
     def forward(self, x):
-        out = None
-
-        out = self.W_embed[x]
-
-        return out
+        return self.W_embed[x]
 
 
 def temporal_softmax_loss(x, y, ignore_index=None):
@@ -335,12 +285,10 @@ def temporal_softmax_loss(x, y, ignore_index=None):
     Returns a tuple of:
         loss: Scalar giving loss
     """
-    loss = None
-
-    # sum over timesteps, average over the batch; fall back to -100 if None
-    loss = F.cross_entropy(x.flatten(0, 1), y.flatten(0, 1), ignore_index=-100 if ignore_index is None else ignore_index, reduction="sum").div(x.shape[0])
-
-    return loss
+    # 时间维加起来，再除以 batch
+    ign = -100 if ignore_index is None else ignore_index
+    loss = F.cross_entropy(x.flatten(0, 1), y.flatten(), ignore_index=ign, reduction="sum")
+    return loss / x.shape[0]
 
 
 class CaptioningRNN(nn.Module):
@@ -398,15 +346,14 @@ class CaptioningRNN(nn.Module):
         self.encoder = ImageEncoder(pretrained=image_encoder_pretrained, verbose=False)
         self.embed = WordEmbedding(vocab_size, wordvec_dim)
         self.output_layer = nn.Linear(hidden_dim, vocab_size)
-        # image feature -> h0 for rnn/lstm, -> A for attention
-        self.feature_projection = nn.Linear(input_dim, hidden_dim)
+        self.feature_projection = nn.Linear(input_dim, hidden_dim)  # 图特征 -> h0 或 A
 
         if cell_type == "rnn":
             self.rnn = RNN(wordvec_dim, hidden_dim)
         elif cell_type == "lstm":
             self.lstm = LSTM(wordvec_dim, hidden_dim)
         else:
-            self.attn_lstm = AttentionLSTM(wordvec_dim + input_dim, hidden_dim)
+            self.attn_lstm = AttentionLSTM(wordvec_dim, hidden_dim)
 
     def forward(self, images, captions):
         """
@@ -422,36 +369,23 @@ class CaptioningRNN(nn.Module):
         Returns:
             loss: A scalar loss
         """
-        # Cut captions into two pieces: captions_in has everything but the last
-        # word and will be input to the RNN; captions_out has everything but the
-        # first word and this is what we will expect the RNN to generate. These
-        # are offset by one relative to each other because the RNN should produce
-        # word (t+1) after receiving word t. The first element of captions_in
-        # will be the START token, and the first element of captions_out will
-        # be the first word.
         captions_in = captions[:, :-1]
-        captions_out = captions[:, 1:]
-
-        loss = 0.0
+        captions_out = captions[:, 1:]  # 错开一位，预测下一个词
 
         features = self.encoder(images)
-        N, _, H_a, W_a = features.shape
-        embeddings = self.embed(captions_in)
+        N, _, Ha, Wa = features.shape
+        emb = self.embed(captions_in)
 
         if self.cell_type == "attn":
-            # (N, C, 4, 4) -> flatten spatial dims -> linear -> (N, H, 4, 4)
             A = self.feature_projection(features.flatten(2).permute(0, 2, 1))
-            A = A.permute(0, 2, 1).view(N, -1, H_a, W_a)
-            # global pooled feature gets concatenated to every timestep
-            global_feat = features.mean(dim=(2, 3)).unsqueeze(1)
-            global_feat = global_feat.expand(-1, embeddings.shape[1], -1)
-            hidden = self.attn_lstm(torch.cat([embeddings, global_feat], dim=2), A)
+            A = A.permute(0, 2, 1).view(N, -1, Ha, Wa)
+            hidden = self.attn_lstm(emb, A)
         else:
-            h0 = self.feature_projection(features.mean(dim=(2, 3)))
+            h0 = self.feature_projection(features.mean((2, 3)))
             if self.cell_type == "rnn":
-                hidden = self.rnn(embeddings, h0)
+                hidden = self.rnn(emb, h0)
             else:
-                hidden = self.lstm(embeddings, h0)
+                hidden = self.lstm(emb, h0)
 
         scores = self.output_layer(hidden)
         loss = temporal_softmax_loss(scores, captions_out, self.ignore_index)
@@ -496,7 +430,6 @@ class CaptioningRNN(nn.Module):
             A = A.permute(0, 2, 1).view(N, -1, features.shape[2], features.shape[3])
             prev_h = A.mean(dim=(2, 3))
             prev_c = prev_h
-            global_feat = features.mean(dim=(2, 3))
         else:
             prev_h = self.feature_projection(features.mean(dim=(2, 3)))
             prev_c = torch.zeros_like(prev_h)
@@ -512,7 +445,7 @@ class CaptioningRNN(nn.Module):
                 attn, attn_weights = dot_product_attention(prev_h, A)
                 attn_weights_all[:, t, :, :] = attn_weights
                 next_h, next_c = self.attn_lstm.step_forward(
-                    torch.cat([word_vec, global_feat], dim=1), prev_h, prev_c, attn
+                    word_vec, prev_h, prev_c, attn
                 )
 
             scores = self.output_layer(next_h)
@@ -544,14 +477,8 @@ class LSTM(nn.Module):
             hidden_dim: Hidden size, denoted as H before
         """
         super().__init__()
-
-        # Register parameters
-        self.Wx = nn.Parameter(
-            torch.randn(input_dim, hidden_dim * 4).div(math.sqrt(input_dim))
-        )
-        self.Wh = nn.Parameter(
-            torch.randn(hidden_dim, hidden_dim * 4).div(math.sqrt(hidden_dim))
-        )
+        self.Wx = nn.Parameter(torch.randn(input_dim, hidden_dim * 4).div(math.sqrt(input_dim)))
+        self.Wh = nn.Parameter(torch.randn(hidden_dim, hidden_dim * 4).div(math.sqrt(hidden_dim)))
         self.b = nn.Parameter(torch.zeros(hidden_dim * 4))
 
     def step_forward(
@@ -575,14 +502,13 @@ class LSTM(nn.Module):
                 next_h: Next hidden state, of shape (N, H)
                 next_c: Next cell state, of shape (N, H)
         """
-        next_h, next_c = None, None
-
         H = prev_h.shape[1]
         a = x.mm(self.Wx) + prev_h.mm(self.Wh) + self.b
+        # 顺序 i, f, o, g
         i = torch.sigmoid(a[:, :H])
-        f = torch.sigmoid(a[:, H : 2 * H])
-        o = torch.sigmoid(a[:, 2 * H : 3 * H])
-        g = torch.tanh(a[:, 3 * H :])
+        f = torch.sigmoid(a[:, H:2*H])
+        o = torch.sigmoid(a[:, 2*H:3*H])
+        g = torch.tanh(a[:, 3*H:])
 
         next_c = f * prev_c + i * g
         next_h = o * torch.tanh(next_c)
@@ -609,11 +535,7 @@ class LSTM(nn.Module):
             hn: The hidden state output.
         """
 
-        c0 = torch.zeros_like(
-            h0
-        )  # we provide the intial cell state c0 here for you!
-        hn = None
-
+        c0 = torch.zeros_like(h0)
         hs = []
         prev_h, prev_c = h0, c0
         for t in range(x.shape[1]):
@@ -639,9 +561,6 @@ def dot_product_attention(prev_h, A):
 
     """
     N, H, D_a, _ = A.shape
-
-    attn, attn_weights = None, None
-
     flat_A = A.view(N, H, -1)
     scores = torch.bmm(prev_h.unsqueeze(1), flat_A).squeeze(1) / math.sqrt(H)
     attn_weights = F.softmax(scores, dim=1).view(N, D_a, D_a)
@@ -668,17 +587,9 @@ class AttentionLSTM(nn.Module):
             b: Biases, of shape (4H,)
         """
         super().__init__()
-
-        # Register parameters
-        self.Wx = nn.Parameter(
-            torch.randn(input_dim, hidden_dim * 4).div(math.sqrt(input_dim))
-        )
-        self.Wh = nn.Parameter(
-            torch.randn(hidden_dim, hidden_dim * 4).div(math.sqrt(hidden_dim))
-        )
-        self.Wattn = nn.Parameter(
-            torch.randn(hidden_dim, hidden_dim * 4).div(math.sqrt(hidden_dim))
-        )
+        self.Wx = nn.Parameter(torch.randn(input_dim, hidden_dim * 4).div(math.sqrt(input_dim)))
+        self.Wh = nn.Parameter(torch.randn(hidden_dim, hidden_dim * 4).div(math.sqrt(hidden_dim)))
+        self.Wattn = nn.Parameter(torch.randn(hidden_dim, hidden_dim * 4).div(math.sqrt(hidden_dim)))
         self.b = nn.Parameter(torch.zeros(hidden_dim * 4))
 
     def step_forward(
@@ -699,14 +610,12 @@ class AttentionLSTM(nn.Module):
             next_h: The next hidden state, of shape (N, H)
             next_c: The next cell state, of shape (N, H)
         """
-        next_h, next_c = None, None
-
         H = prev_h.shape[1]
         a = x.mm(self.Wx) + prev_h.mm(self.Wh) + attn.mm(self.Wattn) + self.b
         i = torch.sigmoid(a[:, :H])
-        f = torch.sigmoid(a[:, H : 2 * H])
-        o = torch.sigmoid(a[:, 2 * H : 3 * H])
-        g = torch.tanh(a[:, 3 * H :])
+        f = torch.sigmoid(a[:, H:2*H])
+        o = torch.sigmoid(a[:, 2*H:3*H])
+        g = torch.tanh(a[:, 3*H:])
 
         next_c = f * prev_c + i * g
         next_h = o * torch.tanh(next_c)
@@ -740,11 +649,8 @@ class AttentionLSTM(nn.Module):
         # The initial hidden state h0 and cell state c0 are initialized
         # differently in AttentionLSTM from the original LSTM and hence
         # we provided them for you.
-        h0 = A.mean(dim=(2, 3))  # Initial hidden state, of shape (N, H)
-        c0 = h0  # Initial cell state, of shape (N, H)
-
-        hn = None
-
+        h0 = A.mean(dim=(2, 3))  # h0 和 c0 都用这个
+        c0 = h0
         hs = []
         prev_h, prev_c = h0, c0
         for t in range(x.shape[1]):
