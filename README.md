@@ -15,7 +15,7 @@
 | A2 | SVM / Softmax、两层网络（手写梯度 + 数值校验） | 已完成（见 `已完成/A2`） |
 | A3 | 全连接网络、CNN（手写优化器 / BN / Dropout / 卷积） | 已完成（见 `已完成/A3`） |
 | A4 | 目标检测：FCOS、Faster R-CNN | 已完成（见 `已完成/A4`） |
-| A5 | RNN / LSTM、图像描述、Transformer、ViT | A5-1（RNN / LSTM / Attention 图像描述）已完成，见 `已完成/A5`；A5-2 进行中 |
+| A5 | RNN / LSTM、图像描述、Transformer、ViT | A5-1、A5-2（Transformer）已完成，见 `已完成/A5` |
 | A6 | VAE、GAN、网络可视化、风格迁移 | 未开始 |
 
 ## 环境
